@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -60,6 +62,7 @@ func getprice(sku string) (price []map[string]string) {
 	}
 	return
 }
+
 func main() {
 	database.CreateDb()
 	now := time.Now()
@@ -67,7 +70,19 @@ func main() {
 	c := make(chan jdProduct)
 	length := crawler(url, c)
 	var buffer bytes.Buffer
-	buffer.WriteString("<table style=\"width:100%\">\n")
+	buffer.WriteString(`
+		<!DOCTYPE html>
+		<html lang="en">
+		<head>
+			<meta charset="utf-8">
+			<meta http-equiv="X-UA-Compatible" content="IE=edge">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<title>SUI 模板</title>
+			<link rel="stylesheet" href="http://g.alicdn.com/sui/sui3/0.0.18/css/sui.min.css">
+		</head>
+		<body>
+	`)
+	buffer.WriteString("<table class=\"table\"\n")
 	for i := 0; i < length; i++ {
 		data := <-c
 		buffer.WriteString(fmt.Sprintf(
@@ -79,6 +94,22 @@ func main() {
 		database.Insert(data.name, data.img, data.price)
 	}
 	buffer.WriteString("</table>\n")
+	buffer.WriteString(`
+		<script type="text/javascript" src="http://g.alicdn.com/sj/lib/jquery/dist/jquery.min.js"></script>
+			<script type="text/javascript" src="http://g.alicdn.com/sui/sui3/0.0.18/js/sui.min.js"></script>
+		</body>
+		</html>
+	`)
 	ioutil.WriteFile("jd.html", buffer.Bytes(), os.ModePerm)
 	fmt.Println(time.Since(now))
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", "jd.html").Start()
+	case "windows", "darwin":
+		err = exec.Command("open", "jd.html").Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	fmt.Println(err)
 }
