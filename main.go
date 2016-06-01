@@ -23,7 +23,7 @@ type result struct {
 	HasMore bool
 }
 
-var ajax_URL = "http://shop.haocaisong.cn/shop/ajax/mall.php"
+var ajaxURL = "http://shop.haocaisong.cn/shop/ajax/mall.php"
 
 func crawler(url string, c chan hcProduct) int {
 	count := 0
@@ -41,7 +41,7 @@ func crawler(url string, c chan hcProduct) int {
 			i := 0
 			href, _ := cata2Sel.Find("a").Attr("href")
 			for {
-				rawurl := fmt.Sprintf("%s%s&page=%d", ajax_URL, href, i)
+				rawurl := fmt.Sprintf("%s%s&page=%d", ajaxURL, href, i)
 				fmt.Println(rawurl)
 				response, err := http.Get(rawurl)
 				if err != nil {
@@ -73,7 +73,7 @@ func crawler(url string, c chan hcProduct) int {
 					count += root.Length()
 					root.Each(func(i int, s *goquery.Selection) {
 						go func() {
-							product_id, _ := s.Attr("id")
+							productID, _ := s.Attr("id")
 							img, exist := s.Find(".gi img").Attr("src")
 							if exist {
 								img = strings.Split(img, "|")[0]
@@ -86,7 +86,7 @@ func crawler(url string, c chan hcProduct) int {
 							spec := info.Find("p.f14").Text()
 							price := info.Find("em.f16").Parent().Text()
 
-							hc := hcProduct{name: name, img: img, price: price, spec: spec, product_id: product_id}
+							hc := hcProduct{name: name, img: img, price: price, spec: spec, product_id: productID}
 							fmt.Println(hc)
 							c <- hc
 						}()
@@ -145,7 +145,7 @@ func main() {
 				<td>%s</td>
 				<td>%s</td>
                 <td>%s</td>
-                <td>%f</td>
+                <td>%s</td>
                 <td><img src="%s"/></td>
             </tr>`, data.product_id, data.name, data.spec, data.price, data.img))
 		database.Insert(data.name, data.img, data.price, data.spec, data.product_id)
