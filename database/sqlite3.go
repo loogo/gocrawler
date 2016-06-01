@@ -7,13 +7,13 @@ import (
 )
 
 func db() (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", "./jd.db")
+	db, err := sql.Open("sqlite3", "./haocai.db")
 	return db, err
 }
 
 // CreateDb create database and table
 func CreateDb() {
-	os.Remove("./jd.db")
+	os.Remove("./haocai.db")
 	db, err := db()
 	if err != nil {
 		log.Fatal(err)
@@ -21,8 +21,8 @@ func CreateDb() {
 	defer db.Close()
 
 	sqlStmt := `
-    create table jd_product(id integer not null primary key AUTOINCREMENT, name text, img text, price float);
-    delete from jd_product;
+    create table hc_product(id integer not null primary key AUTOINCREMENT, product_id text, name text, spec text, img text, price float);
+    delete from hc_product;
     `
 
 	_, err = db.Exec(sqlStmt)
@@ -43,7 +43,7 @@ func Insert(args ...interface{}) {
 		log.Fatal(err)
 	}
 
-	stmt, err := tx.Prepare("insert into jd_product(name,img,price) values(?,?,?)")
+	stmt, err := tx.Prepare("insert into hc_product(name,img,price,spec,product_id) values(?,?,?,?,?)")
 	if err != nil {
 		log.Fatal(err)
 	}

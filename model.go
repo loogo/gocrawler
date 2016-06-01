@@ -1,7 +1,9 @@
 package main
 
-type jdProduct struct {
-	name  string
-	img   string
-	price float64
+type hcProduct struct {
+	product_id string
+	name       string
+	img        string
+	spec       string
+	price      string
 }

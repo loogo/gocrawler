@@ -10,39 +10,94 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/loogo/gocrawler/database"
+	"github.com/loogo/haocai/database"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func crawler(url string, c chan jdProduct) int {
-	doc, err := goquery.NewDocument(url)
+type result struct {
+	HTML    string
+	HasMore bool
+}
 
+var ajax_URL = "http://shop.haocaisong.cn/shop/ajax/mall.php"
+
+func crawler(url string, c chan hcProduct) int {
+	count := 0
+	document, err := goquery.NewDocument(url)
 	if err != nil {
 		log.Fatal(err)
 	}
-	root := doc.Find("#plist .gl-item")
-	root.Each(func(i int, s *goquery.Selection) {
-		go func() {
-			gsku, _ := s.Find(".gl-i-wrap.j-sku-item").Attr("data-sku")
-			skudoc, _ := goquery.NewDocument(fmt.Sprintf("https://item.jd.com/%s.html", gsku))
+	cata1 := document.Find("ul.types li")
+	cata1.Each(func(j int, cata1Sel *goquery.Selection) {
+		cata2Url, _ := cata1Sel.Find("a").Attr("href")
+		cata2Url = url + cata2Url
+		document, err = goquery.NewDocument(cata2Url)
+		cata2 := document.Find("ul.swiper-wrapper li")
+		cata2.Each(func(k int, cata2Sel *goquery.Selection) {
+			i := 0
+			href, _ := cata2Sel.Find("a").Attr("href")
+			for {
+				rawurl := fmt.Sprintf("%s%s&page=%d", ajax_URL, href, i)
+				fmt.Println(rawurl)
+				response, err := http.Get(rawurl)
+				if err != nil {
+					fmt.Println(err)
+				}
+				defer response.Body.Close()
+				body, err := ioutil.ReadAll(response.Body)
+				if err != nil {
+					fmt.Println(err)
+				}
+				var jsonRes result
+				err = json.Unmarshal(body, &jsonRes)
+				if err != nil {
+					fmt.Println(err)
+				}
 
-			pname := s.Find(".p-name").Text()
-			pimg, exist := skudoc.Find("#spec-n1 img").Attr("src")
+				if !jsonRes.HasMore || len(jsonRes.HTML) == 0 {
+					break
+				}
+				if len(jsonRes.HTML) > 0 {
 
-			pprice := getprice(gsku)
-			if !exist {
-				pimg = "Not Exist!"
+					htmlReader := strings.NewReader(jsonRes.HTML)
+					doc, err := goquery.NewDocumentFromReader(htmlReader)
+
+					if err != nil {
+						log.Fatal(err)
+					}
+					root := doc.Find("li")
+					count += root.Length()
+					root.Each(func(i int, s *goquery.Selection) {
+						go func() {
+							product_id, _ := s.Attr("id")
+							img, exist := s.Find(".gi img").Attr("src")
+							if exist {
+								img = strings.Split(img, "|")[0]
+							} else {
+								img = "Not Exist!"
+							}
+							info := s.Find(".intro")
+
+							name := info.Find("h3.f15").Text()
+							spec := info.Find("p.f14").Text()
+							price := info.Find("em.f16").Parent().Text()
+
+							hc := hcProduct{name: name, img: img, price: price, spec: spec, product_id: product_id}
+							fmt.Println(hc)
+							c <- hc
+						}()
+					})
+				}
+				i++
 			}
-			p := pprice[0]["p"]
-			price, _ := strconv.ParseFloat(p, 64)
-			c <- jdProduct{name: pname, img: pimg, price: price}
-		}()
+		})
 	})
-	return root.Length()
+
+	return count
 }
 func getprice(sku string) (price []map[string]string) {
 	url := fmt.Sprintf("http://p.3.cn/prices/mgets?skuIds=J_%s&type=1", sku)
@@ -66,8 +121,8 @@ func getprice(sku string) (price []map[string]string) {
 func main() {
 	database.CreateDb()
 	now := time.Now()
-	url := "https://list.jd.com/list.html?cat=9987,653,655"
-	c := make(chan jdProduct)
+	url := "http://shop.haocaisong.cn/shop/mall.php"
+	c := make(chan hcProduct)
 	length := crawler(url, c)
 	var buffer bytes.Buffer
 	buffer.WriteString(`
@@ -87,11 +142,13 @@ func main() {
 		data := <-c
 		buffer.WriteString(fmt.Sprintf(
 			`<tr>
+				<td>%s</td>
+				<td>%s</td>
                 <td>%s</td>
                 <td>%f</td>
-                <td><img src="http:%s"/></td>
-            </tr>`, data.name, data.price, data.img))
-		database.Insert(data.name, data.img, data.price)
+                <td><img src="%s"/></td>
+            </tr>`, data.product_id, data.name, data.spec, data.price, data.img))
+		database.Insert(data.name, data.img, data.price, data.spec, data.product_id)
 	}
 	buffer.WriteString("</table>\n")
 	buffer.WriteString(`
@@ -100,14 +157,14 @@ func main() {
 		</body>
 		</html>
 	`)
-	ioutil.WriteFile("jd.html", buffer.Bytes(), os.ModePerm)
+	ioutil.WriteFile("haocai.html", buffer.Bytes(), os.ModePerm)
 	fmt.Println(time.Since(now))
 	var err error
 	switch runtime.GOOS {
 	case "linux":
-		err = exec.Command("xdg-open", "jd.html").Start()
+		err = exec.Command("xdg-open", "haocai.html").Start()
 	case "windows", "darwin":
-		err = exec.Command("open", "jd.html").Start()
+		err = exec.Command("open", "haocai.html").Start()
 	default:
 		err = fmt.Errorf("unsupported platform")
 	}
