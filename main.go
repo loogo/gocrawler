@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/loogo/haocai/database"
+	"github.com/loogo/gocrawler/database"
 	// _ "github.com/mattn/go-sqlite3"
 	_ "github.com/go-sql-driver/mysql"
 )
