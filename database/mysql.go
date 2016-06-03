@@ -3,37 +3,51 @@ package database
 import (
 	"database/sql"
 	"log"
-	"os"
 )
 
-func db() (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", "./haocai.db")
+// MySQL Instance
+type MySQL struct {
+	DataSourceName string
+}
+
+func (mysql *MySQL) db() (*sql.DB, error) {
+	db, err := sql.Open("mysql", mysql.DataSourceName)
 	return db, err
 }
 
 // CreateDb create database and table
-func CreateDb() {
-	os.Remove("./haocai.db")
-	db, err := db()
+func (mysql *MySQL) CreateDb() {
+	db, err := mysql.db()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
 	sqlStmt := `
-    create table hc_product(id integer not null primary key AUTOINCREMENT, product_id text, name text, spec text, img text, price text,pri text,img_id text);
-    delete from hc_product;
+    create table hc_product(
+        id INT(10) NOT NULL AUTO_INCREMENT, 
+        product_id VARCHAR(64), 
+        name VARCHAR(64), 
+        spec VARCHAR(64), 
+        img VARCHAR(64), 
+        price VARCHAR(64),
+        pri VARCHAR(64),
+        img_id VARCHAR(64),
+        PRIMARY KEY (id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8 DEFAULT COLLATE utf8_unicode_ci;
     `
 
 	_, err = db.Exec(sqlStmt)
 	if err != nil {
 		log.Printf("%q: %s\n", err, sqlStmt)
+		sqlStmt = "delete from hc_product;"
+		db.Exec(sqlStmt)
 	}
 }
 
 // Insert new data
-func Insert(args ...interface{}) {
-	db, err := db()
+func (mysql *MySQL) Insert(args ...interface{}) {
+	db, err := mysql.db()
 	if err != nil {
 		log.Fatal(err)
 	}

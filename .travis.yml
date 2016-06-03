@@ -1,0 +1,15 @@
+language: go
+go:
+  - 1.6.2
+env:
+  - "PATH=/home/travis/gopath/bin:$PATH"
+before_install:
+  - go get github.com/mitchellh/gox
+  - go get github.com/tcnksm/ghr
+
+after_success:
+  - gox -arch="amd64" -os="windows linux darwin" -output "dist/{{.OS}}_{{.Arch}}/{{.Dir}}"
+  - mkdir -p zip
+  - for i in `ls dist`; do zip -j zip/$i.zip dist/$i/*; done
+  # - gox -output "dist/{{.OS}}_{{.Arch}}_{{.Dir}}_R${TRAVIS_COMMIT}"
+  - ghr --username loogo --token $GITHUB_TOKEN --replace --debug SyncServer zip/

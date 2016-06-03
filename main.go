@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,7 +16,8 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/loogo/haocai/database"
-	_ "github.com/mattn/go-sqlite3"
+	// _ "github.com/mattn/go-sqlite3"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type result struct {
@@ -31,14 +33,14 @@ func crawler(url string, c chan hcProduct) int {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cata1 := document.Find("ul.types li")
+	cata1 := document.Find("#cate_list ul.types li")
 	cata1.Each(func(j int, cata1Sel *goquery.Selection) {
 		cata2Url, _ := cata1Sel.Find("a").Attr("href")
 		cata2Url = url + cata2Url
 		document, err = goquery.NewDocument(cata2Url)
-		cata2 := document.Find("ul.swiper-wrapper li")
+		cata2 := document.Find("#cate2_container_ ul.swiper-wrapper li")
 		cata2.Each(func(k int, cata2Sel *goquery.Selection) {
-			i := 0
+			i := 1
 			href, _ := cata2Sel.Find("a").Attr("href")
 			for {
 				rawurl := fmt.Sprintf("%s%s&page=%d", ajaxURL, href, i)
@@ -70,13 +72,15 @@ func crawler(url string, c chan hcProduct) int {
 						log.Fatal(err)
 					}
 					root := doc.Find("li")
-					count += root.Length()
+
 					root.Each(func(i int, s *goquery.Selection) {
+						count++
+						// fmt.Println(count)
 						go func() {
 							productID, _ := s.Attr("id")
 							img, exist := s.Find(".gi img").Attr("src")
 							if exist {
-								img = strings.Split(img, "|")[0]
+								img = strings.Split(img, "@")[0]
 							} else {
 								img = "Not Exist!"
 							}
@@ -88,6 +92,8 @@ func crawler(url string, c chan hcProduct) int {
 
 							hc := hcProduct{name: name, img: img, price: price, spec: spec, product_id: productID}
 							fmt.Println(hc)
+
+							downloadImg(img)
 							c <- hc
 						}()
 					})
@@ -99,27 +105,32 @@ func crawler(url string, c chan hcProduct) int {
 
 	return count
 }
-func getprice(sku string) (price []map[string]string) {
-	url := fmt.Sprintf("http://p.3.cn/prices/mgets?skuIds=J_%s&type=1", sku)
+func downloadImg(url string) {
 	response, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 	defer response.Body.Close()
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		fmt.Println(err)
-	}
 
-	err = json.Unmarshal(body, &price)
+	imgArray := strings.Split(url, "/")
+	imgName := imgArray[len(imgArray)-1]
+	file, err := os.Create("images/" + imgName)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
-	return
+	// Use io.Copy to just dump the response body to the file. This supports huge files
+	_, err = io.Copy(file, response.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	file.Close()
 }
 
 func main() {
-	database.CreateDb()
+	cfg := loadconfig()
+	db := database.MySQL{DataSourceName: cfg.DataSourceName}
+	db.CreateDb()
 	now := time.Now()
 	url := "http://shop.haocaisong.cn/shop/mall.php"
 	c := make(chan hcProduct)
@@ -138,17 +149,29 @@ func main() {
 		<body>
 	`)
 	buffer.WriteString("<table class=\"table\"\n")
+	pIDs := make(map[string]string, length)
 	for i := 0; i < length; i++ {
 		data := <-c
+		price := strings.Replace(data.price, "元", "@", 1)
+
+		price = strings.Split(price, "@")[0][2:]
+
+		imgURL := strings.Split(data.img, "/")
+		imgID := imgURL[len(imgURL)-1]
 		buffer.WriteString(fmt.Sprintf(
 			`<tr>
 				<td>%s</td>
 				<td>%s</td>
                 <td>%s</td>
                 <td>%s</td>
+				<td>%s</td>
+				<td>%s</td>
                 <td><img src="%s"/></td>
-            </tr>`, data.product_id, data.name, data.spec, data.price, data.img))
-		database.Insert(data.name, data.img, data.price, data.spec, data.product_id)
+            </tr>`, data.product_id, data.name, data.spec, data.price, price, imgID, data.img))
+		if _, ok := pIDs[data.product_id]; !ok {
+			db.Insert(data.name, data.img, data.price, data.spec, data.product_id, price, imgID)
+			pIDs[data.product_id] = ""
+		}
 	}
 	buffer.WriteString("</table>\n")
 	buffer.WriteString(`
